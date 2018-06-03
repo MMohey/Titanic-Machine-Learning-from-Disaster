@@ -1,6 +1,6 @@
 # Load packages
 # 
-setwd("~/Downloads/Kaggle Titanic")
+setwd("~/Downloads/Kaggle Titanic/Titanic")
 
 library('ggplot2')
 library('ggthemes')
@@ -8,6 +8,7 @@ library('scales')
 library('dplyr')
 library('mice')
 library('randomForest')
+library(stringr)
 
 # Reading data
 train <- read.csv('train.csv', stringsAsFactors = F)
@@ -116,3 +117,39 @@ hist(mice_output$Age, freq = F, main = "Age: MICE Output", col = "lightgreen",
 
 # replacing the original Age with MICE age
 full$Age <- mice_output$Age
+
+# split the data into training and test set
+train <- full[1:891,]
+test <- full[892:1309,]
+
+# Build the model
+set.seed(123)
+rf_model <- randomForest(factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch+
+                         Fare + Embarked + Title + FsizeD,
+                         data = train)
+
+# plot the model error
+plot(rf_model, ylim = c(0,0.35))
+legend("topright")
+
+# Get var importance
+importance <- importance(rf_model)
+var_importance <- data.frame(Variables = row.names(importance),
+                             Importance = round(
+                                 importance[,"MeanDecreaseGini"],2))
+rank_importance <- var_importance %>% 
+    mutate(Rank = str_c("#", dense_rank(desc(importance))))
+
+ggplot(rank_importance, aes(
+    x=reorder(Variables, Importance), y= Importance, fill = Importance )) +
+    geom_bar(stat = "identity") + 
+    geom_text(aes(x = Variables, y = 0.5, label = Rank),
+              hjust=0, vjust=0.55, size = 4, colour = 'red')+
+    labs(x = 'Variables') +
+    coord_flip() + 
+    theme_few()
+
+# Prediction
+prediction <- predict(rf_model,test)
+output <- data.frame(PassengerID = test$PassengerId, Survived = prediction)    
+write.csv(output, file = 'rf_mod_survived_output.csv', row.names = F)
