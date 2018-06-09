@@ -8,7 +8,9 @@ library('scales')
 library('dplyr')
 library('mice')
 library('randomForest')
-library(stringr)
+library("stringr")
+library("e1071")
+library("caret")
 
 # Reading data
 train <- read.csv('train.csv', stringsAsFactors = F)
@@ -53,7 +55,7 @@ full$FsizeD[full$Fsize >4] <- 'large'
 mosaicplot(table(full$FsizeD, full$Survived), shade = TRUE)
 
 # Create a Deck var 
-full$Deck <- factor(sapply(full$Cabin, function(x) strsplit(x,NULL)[[1]][1]))
+full$Deck<-factor(sapply(full$Cabin, function(x) strsplit(x, NULL)[[1]][1]))
 
 # To check for missing values
 sapply(full, function(x) sum(is.na(x) | x ==""))
@@ -93,6 +95,33 @@ ggplot(full[full$Pclass=='3' & full$Embarked=='S',], aes(x=Fare)) +
 full$Fare[1044] <- 
     median(full[full$Pclass=='3' & full$Embarked=='S',]$Fare, na.rm = TRUE)
 
+# #  trying more feature engineering
+# #  
+# full$Sex <- if_else(full$Sex=="female", 0,1)
+# full$Sex <- as.numeric(as.character(full$Sex))
+# 
+# full$Embarked[full$Embarked =="S"] <-"0" 
+# full$Embarked[full$Embarked =="Q"] <-"1" 
+# full$Embarked[full$Embarked =="C"] <-"2" 
+# full$Embarked <- as.numeric(full$Embarked)
+# 
+# full$Deck[full$Deck =="A"] <-"1" 
+# full$Deck[full$Deck =="B"] <-"2" 
+# full$Deck[full$Deck =="C"] <-"3" 
+# full$Deck[full$Deck =="D"] <-"4" 
+# full$Deck[full$Deck =="E"] <-"5" 
+# full$Deck[full$Deck =="F"] <-"6" 
+# full$Deck[full$Deck =="G"] <-"7" 
+# full$Deck[full$Deck =="T"] <-"8" 
+# full$Deck[full$Deck =="" | is.na(full$Deck)] <-"0" 
+# full$Deck <- as.numeric(full$Deck)
+# 
+# full$FsizeD[full$FsizeD=="small"] <- "0"
+# full$FsizeD[full$FsizeD=="singleton"] <- "1"
+# full$FsizeD[full$FsizeD=="large"] <- "2"
+# full$FsizeD <- as.numeric(full$FsizeD)
+# #################
+# #################
 # use mice to impute missing values for age
 sum(is.na(full$Age))
 # Change some variables factors into factors
@@ -119,18 +148,26 @@ hist(mice_output$Age, freq = F, main = "Age: MICE Output", col = "lightgreen",
 full$Age <- mice_output$Age
 
 # split the data into training and test set
+
 train <- full[1:891,]
 test <- full[892:1309,]
 
 # Build the model
+
 set.seed(123)
 rf_model <- randomForest(factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch+
-                         Fare + Embarked + Title + FsizeD,
+                         Fare + Embarked + Title + FsizeD ,
                          data = train)
-
+svm_model <- svm(factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch+
+                     Fare + Embarked + Title + FsizeD,
+                 data = train)
+svm_model_2 <- train(factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch+
+                     Fare + Embarked + Title + FsizeD,
+                 data = train,
+                 method="svmRadial") 
 # plot the model error
 plot(rf_model, ylim = c(0,0.35))
-legend("topright")
+legend('topright', colnames(rf_model$err.rate), col=1:3, fill=1:3)
 
 # Get var importance
 importance <- importance(rf_model)
@@ -140,16 +177,20 @@ var_importance <- data.frame(Variables = row.names(importance),
 rank_importance <- var_importance %>% 
     mutate(Rank = str_c("#", dense_rank(desc(importance))))
 
-ggplot(rank_importance, aes(
-    x=reorder(Variables, Importance), y= Importance, fill = Importance )) +
-    geom_bar(stat = "identity") + 
+ggplot(rank_importance, aes(x = reorder(Variables, Importance), 
+                           y = Importance, fill = Importance)) +
+    geom_bar(stat='identity') + 
     geom_text(aes(x = Variables, y = 0.5, label = Rank),
-              hjust=0, vjust=0.55, size = 4, colour = 'red')+
+              hjust=0, vjust=0.55, size = 4, colour = 'red') +
     labs(x = 'Variables') +
     coord_flip() + 
     theme_few()
 
 # Prediction
 prediction <- predict(rf_model,test)
-output <- data.frame(PassengerID = test$PassengerId, Survived = prediction)    
+prediction_svm <- predict(svm_model_2, test)
+output <- data.frame(PassengerID = test$PassengerId, Survived = prediction)
+output_svm <- data.frame(PassengerID = test$PassengerId, 
+                         Survived = prediction_svm)
 write.csv(output, file = 'rf_mod_survived_output.csv', row.names = F)
+write.csv(output_svm, file = 'svm_mod_survived_output.csv', row.names = F)
