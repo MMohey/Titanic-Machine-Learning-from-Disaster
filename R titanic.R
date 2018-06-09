@@ -180,23 +180,18 @@ set.seed(123)
 rf_model <- randomForest(factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch+
                          Fare + Embarked + Title + FsizeD + Child + Mother ,
                          data = train)
-svm_model <- svm(factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch+
-                     Fare + Embarked + Title + FsizeD,
-                 data = train)
+
 svm_model <- train(factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch+
                      Fare + Embarked + Title + FsizeD + Child + Mother,
                  data = train,
                  method="svmRadial") 
-knn_model <- knn3(factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch+
-                         Fare + Embarked + Title + FsizeD + Child + Mother,
-                     data = train,
-                  k=1) 
-nn_model <- nnet(factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch+
-                      Fare + Embarked + Title + FsizeD + Child + Mother,
-                  data = train, maxit = 1000, trace = FALSE, size = 1)
-nb_model <- naiveBayes(factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch+
-                     Fare + Embarked + Title + FsizeD + Child + Mother,
-                 data = train)
+knn_model <- train(factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch+
+                       Fare + Embarked + Title + FsizeD + Child + Mother,
+                   data = train,
+                   method="knn", preProcess = c("center", "scale"), 
+                   tuneLength = 10,
+                   trControl = trainControl(method = "cv"))
+
 # plot the model error
 plot(rf_model, ylim = c(0,0.35))
 legend('topright', colnames(rf_model$err.rate), col=1:3, fill=1:3)
@@ -219,26 +214,18 @@ ggplot(rank_importance, aes(x = reorder(Variables, Importance),
     theme_few()
 
 # Prediction
-prediction <- predict(rf_model,test)
+prediction_rf <- predict(rf_model,test)
 prediction_svm <- predict(svm_model, test)
 prediction_knn <- predict(knn_model, test)
-prediction_nn <- predict(nn_model, test)
-prediction_nb <- predict(nb_model, test)
 
-output <- data.frame(PassengerID = test$PassengerId, Survived = prediction)
+
+output_rf <- data.frame(PassengerID = test$PassengerId, Survived = prediction)
 output_svm <- data.frame(PassengerID = test$PassengerId, 
                          Survived = prediction_svm)
 output_knn <- data.frame(PassengerID = test$PassengerId, 
                          Survived = prediction_knn)
-output_knn$Survived <- output_knn$Survived.1
-output_knn <- output_knn[,-2:-3]
-output_knn$Survived <-lapply(output_knn$Survived, function(x) round(x))
-output_nn <- data.frame(PassengerID = test$PassengerId, 
-                         Survived = prediction_nn)
-output_nb <- data.frame(PassengerID = test$PassengerId, 
-                         Survived = prediction_nb)
-write.csv(output, file = 'rf_mod_survived_output.csv', row.names = F)
+
+write.csv(output_rf, file = 'rf_mod_survived_output.csv', row.names = F)
 write.csv(output_svm, file = 'svm_mod_survived_output.csv', row.names = F)
 write.csv(output_knn, file = 'knn_mod_survived_output.csv', row.names = F)
-write.csv(output_nn, file = 'nn_mod_survived_output.csv', row.names = F)
-write.csv(output_nb, file = 'nb_mod_survived_output.csv', row.names = F)
+
