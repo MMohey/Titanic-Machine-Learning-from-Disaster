@@ -11,6 +11,7 @@ library('randomForest')
 library("stringr")
 library("e1071")
 library("caret")
+library("nnet")
 
 # Reading data
 train <- read.csv('train.csv', stringsAsFactors = F)
@@ -147,6 +148,27 @@ hist(mice_output$Age, freq = F, main = "Age: MICE Output", col = "lightgreen",
 # replacing the original Age with MICE age
 full$Age <- mice_output$Age
 
+# Feature Engineering in the Name length
+# full$name_length <- nchar(full$Name)
+# 
+
+# create new features to separate Adults from Childeren
+# full$male_child[full$Age<33 & full$Sex=="male"] <- "m_child"
+# full$male_child[full$Age<33 & full$Sex=="female"] <- "f_child"
+# full$male_child[full$Age>=33 & full$Sex=="male"] <- "m_adult"
+# full$male_child[full$Age>=33 & full$Sex=="female"] <- "f_adult"
+# full$male_child <- factor(full$male_child)
+
+
+full$Child[full$Age < 18] <- 'Child'
+full$Child[full$Age >= 18] <- 'Adult'
+
+full$Mother <- 'Not Mother'
+full$Mother[full$Sex == 'female' & full$Parch > 0 & full$Age > 18 & full$Title != 'Miss'] <- 'Mother'
+
+full$Child  <- factor(full$Child)
+full$Mother <- factor(full$Mother)
+
 # split the data into training and test set
 
 train <- full[1:891,]
@@ -156,15 +178,25 @@ test <- full[892:1309,]
 
 set.seed(123)
 rf_model <- randomForest(factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch+
-                         Fare + Embarked + Title + FsizeD ,
+                         Fare + Embarked + Title + FsizeD + Child + Mother ,
                          data = train)
 svm_model <- svm(factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch+
                      Fare + Embarked + Title + FsizeD,
                  data = train)
-svm_model_2 <- train(factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch+
-                     Fare + Embarked + Title + FsizeD,
+svm_model <- train(factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch+
+                     Fare + Embarked + Title + FsizeD + Child + Mother,
                  data = train,
                  method="svmRadial") 
+knn_model <- knn3(factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch+
+                         Fare + Embarked + Title + FsizeD + Child + Mother,
+                     data = train,
+                  k=1) 
+nn_model <- nnet(factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch+
+                      Fare + Embarked + Title + FsizeD + Child + Mother,
+                  data = train, maxit = 1000, trace = FALSE, size = 1)
+nb_model <- naiveBayes(factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch+
+                     Fare + Embarked + Title + FsizeD + Child + Mother,
+                 data = train)
 # plot the model error
 plot(rf_model, ylim = c(0,0.35))
 legend('topright', colnames(rf_model$err.rate), col=1:3, fill=1:3)
@@ -188,9 +220,25 @@ ggplot(rank_importance, aes(x = reorder(Variables, Importance),
 
 # Prediction
 prediction <- predict(rf_model,test)
-prediction_svm <- predict(svm_model_2, test)
+prediction_svm <- predict(svm_model, test)
+prediction_knn <- predict(knn_model, test)
+prediction_nn <- predict(nn_model, test)
+prediction_nb <- predict(nb_model, test)
+
 output <- data.frame(PassengerID = test$PassengerId, Survived = prediction)
 output_svm <- data.frame(PassengerID = test$PassengerId, 
                          Survived = prediction_svm)
+output_knn <- data.frame(PassengerID = test$PassengerId, 
+                         Survived = prediction_knn)
+output_knn$Survived <- output_knn$Survived.1
+output_knn <- output_knn[,-2:-3]
+output_knn$Survived <-lapply(output_knn$Survived, function(x) round(x))
+output_nn <- data.frame(PassengerID = test$PassengerId, 
+                         Survived = prediction_nn)
+output_nb <- data.frame(PassengerID = test$PassengerId, 
+                         Survived = prediction_nb)
 write.csv(output, file = 'rf_mod_survived_output.csv', row.names = F)
 write.csv(output_svm, file = 'svm_mod_survived_output.csv', row.names = F)
+write.csv(output_knn, file = 'knn_mod_survived_output.csv', row.names = F)
+write.csv(output_nn, file = 'nn_mod_survived_output.csv', row.names = F)
+write.csv(output_nb, file = 'nb_mod_survived_output.csv', row.names = F)
